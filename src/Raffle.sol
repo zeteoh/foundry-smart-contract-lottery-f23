@@ -34,6 +34,14 @@ import {VRFConsumerBaseV2} from "@chainlink/contracts/src/v0.8/VRFConsumerBaseV2
 contract Raffle is VRFConsumerBaseV2 {
     error Raffle__NotEnoughtEthSent();
     error Raffle__TransferFailed();
+    error Raffle__RaffleNotOpen();
+
+    /**Type Declaration */
+    enum RaffleState {
+        OPEN, // 0
+        CALCULATING // 1
+    }
+
     /**State Variables */
     uint16 private constant REQUEST_CONFIRMATIONS = 3;
     uint32 private constant NUM_WORDS = 1;
@@ -48,10 +56,11 @@ contract Raffle is VRFConsumerBaseV2 {
     address payable[] private s_players;
     uint256 private s_lastTimeStamp;
     address private s_recentWinner;
-
+    RaffleState private s_raffleState;
 
     /** Events */
     event EnteredRaffle(address indexed player);
+
     /* Functions */
     constructor(
         uint64 subscriptionId,
@@ -60,8 +69,10 @@ contract Raffle is VRFConsumerBaseV2 {
         uint256 entranceFee,
         uint32 callbackGasLimit,
         address vrfCoordinatorV2
+    )
         // the bottom is for inheritance
-    ) VRFConsumerBaseV2(vrfCoordinatorV2) {
+        VRFConsumerBaseV2(vrfCoordinatorV2)
+    {
         i_vrfCoordinator = VRFCoordinatorV2Interface(vrfCoordinatorV2);
         i_gasLane = gasLane;
         i_interval = interval;
@@ -69,12 +80,16 @@ contract Raffle is VRFConsumerBaseV2 {
         i_entranceFee = entranceFee;
         s_lastTimeStamp = block.timestamp;
         i_callbackGasLimit = callbackGasLimit;
+        s_raffleState = RaffleState.OPEN;
     }
 
     function enterRaffle() external payable {
         //require(msg.value >= i_entranceFee, "Not enough ETH sent!");
         if (msg.value < i_entranceFee) {
             revert Raffle__NotEnoughtEthSent();
+        }
+        if (s_raffleState != RaffleState.OPEN) {
+            revert Raffle__RaffleNotOpen();
         }
         // 1. Makes migration easier
         // 2. Makes front end "indexing" easier
@@ -88,10 +103,10 @@ contract Raffle is VRFConsumerBaseV2 {
         //check to see if enough time has passed
 
         //1000 - 500 = 500. 600 seconds
-        if((block.timestamp - s_lastTimeStamp) < i_interval){
+        if ((block.timestamp - s_lastTimeStamp) < i_interval) {
             revert();
         }
-
+        s_raffleState = RaffleState.CALCULATING;
         uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane,
             i_subscriptionId,
@@ -108,11 +123,13 @@ contract Raffle is VRFConsumerBaseV2 {
         uint256 indexOfWinner = _randomWords[0] % s_players.length;
         address payable winner = s_players[indexOfWinner];
         s_recentWinner = winner;
-        (bool success,) = winner.call{value: address(this).balance}("");
-        if(!success){
+        s_raffleState = RaffleState.OPEN;
+        (bool success, ) = winner.call{value: address(this).balance}("");
+        if (!success) {
             revert Raffle__TransferFailed();
         }
     }
+
     /** Getter Function */
 
     function getEntranceFee() external view returns (uint256) {
