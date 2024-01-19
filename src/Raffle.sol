@@ -96,6 +96,7 @@ contract Raffle is VRFConsumerBaseV2 {
         if (s_raffleState != RaffleState.OPEN) {
             revert Raffle__RaffleNotOpen();
         }
+        s_players.push(payable(msg.sender));
         // 1. Makes migration easier
         // 2. Makes front end "indexing" easier
         emit EnteredRaffle(msg.sender);
@@ -149,7 +150,7 @@ contract Raffle is VRFConsumerBaseV2 {
 
     // CEI: Checks, Effects, Interactions
     function fulfillRandomWords(
-        uint256 _requestId,
+        uint256 /**requestId */,
         uint256[] memory _randomWords
     ) internal override {
         // checks
